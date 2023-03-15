@@ -15,6 +15,10 @@ fxor = np.vectorize(np.bitwise_xor)
 def gen_all_shares_Y(y_range, n_shares):
     """
     Exhaustive shares matrix for every y in Y
+
+    return
+    all_shares: all posible n_shares-1 shares values, shape: (n_shares-1, y_range^(n_shares-1))
+    masked_Y: masked secret for all value in Y, shape: (y_range, y_range^(n_shares-1))
     """
     y_range_ = np.arange(y_range).reshape(1, 256)
     all_shares = np.zeros((y_range**(n_shares-1), n_shares-1), dtype=np.int16)
@@ -72,13 +76,10 @@ def p_y_given_l(l, y, shares, masked_Y, n_shares, y_range, sigma):
     p = numerator/denominator
     return p
 
-def conditional_entropy(n_samples, n_shares, y_range, sigma):
+def conditional_entropy(shares, masked_Y, n_samples, n_shares, y_range, sigma):
     """
     1/(y_range)*1/n sum_y sum_l log2(P(y|l))
     """
-    with open("precomputed_shares.npy", "rb") as f:
-        shares = np.load(f)
-        masked_Y = np.load(f)
     acc_p = 0
     for y in range(y_range):
         acc_py = 0
@@ -93,8 +94,8 @@ def conditional_entropy(n_samples, n_shares, y_range, sigma):
         acc_p += acc_py
     return acc_p/y_range
 
-def MI(n_samples, n_shares, y_range, sigma):
-    con_ent = conditional_entropy(n_samples, n_shares, y_range, sigma)
+def MI(shares, masked_Y, n_samples, n_shares, y_range, sigma):
+    con_ent = conditional_entropy(shares, masked_Y, n_samples, n_shares, y_range, sigma)
     return np.log2(y_range) + con_ent
 
 
@@ -107,6 +108,9 @@ if __name__ == '__main__':
     #     masked_Y = np.load(f)
     # pretty_print_a(shares)
     # pretty_print_a(masked_Y)
+    with open("precomputed_shares.npy", "rb") as f:
+        shares = np.load(f)
+        masked_Y = np.load(f)
     sigma_2 = np.linspace(-3, 1, 9, endpoint=True)
     sigma_2_10 = np.power(10, sigma_2)
     sigma = np.sqrt(sigma_2_10)
@@ -120,7 +124,7 @@ if __name__ == '__main__':
     for s, m in zip(sigma, log_mie):
         n = int(2/10**m)
         print(f"========================={s}, {n}====================")
-        mi = MI(n, n_shares, y_range, s)
+        mi = MI(shares, masked_Y, n, n_shares, y_range, s)
         print(mi)
         I[i] = np.log10(mi)
         i += 1
