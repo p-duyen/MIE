@@ -98,7 +98,6 @@ def MI(shares, masked_Y, n_samples, n_shares, y_range, sigma):
     con_ent = conditional_entropy(shares, masked_Y, n_samples, n_shares, y_range, sigma)
     return np.log2(y_range) + con_ent
 
-
 if __name__ == '__main__':
     n_shares = 2
     y_range = 256
@@ -111,25 +110,29 @@ if __name__ == '__main__':
     with open("precomputed_shares.npy", "rb") as f:
         shares = np.load(f)
         masked_Y = np.load(f)
-    sigma_2 = np.linspace(-3, 1, 9, endpoint=True)
+    # sigma_2 = np.linspace(-3, 1, 9, endpoint=True)
+    # log_mie = np.linspace(0, -3, 9, endpoint=True)
+    # log_mie[:3] = 0
+    # print(log_mie)
+    sparse_sigma_2 = np.linspace(-3, -1.5, 4)
+    sparse_log_mie = np.zeros_like(sparse_sigma_2)
+    dense_sigma_2 = np.linspace(-1.25, 1, 19)
+    dense_log_mie = np.linspace(-0.1, -2.75, 19)
+    sigma_2 = np.hstack((sparse_sigma_2, dense_sigma_2))
+    log_mie = np.hstack((sparse_log_mie, dense_log_mie))
+    [print(sigma_2[i], log_mie[i]) for i in range(log_mie.shape[0])]
     sigma_2_10 = np.power(10, sigma_2)
     sigma = np.sqrt(sigma_2_10)
-    log_mie = np.linspace(0, -3, 7, endpoint=True)
-    log_mie[:3] = 0
-
-    I = np.zeros(sigma.shape)
+    I = np.zeros_like(sigma_2)
     i = 0
-    # print(sigma_2)
-    # print(sigma)
     for s, m in zip(sigma, log_mie):
         n = int(2/10**m)
-        print(f"========================={s}, {n}====================")
+        print(f"========================={np.log10(s**2)}, {n}====================")
         mi = MI(shares, masked_Y, n, n_shares, y_range, s)
-        print(mi)
-        I[i] = np.log10(mi)
+        mi = np.log10(mi)
+        I[i] = mi
         i += 1
-
-        with open("log.txt", "a") as f_:
+        with open("log_.txt", "a") as f_:
             f_.write(f"{mi}\n")
     with open("MI.npy", "wb") as f:
         np.save(f, I)
