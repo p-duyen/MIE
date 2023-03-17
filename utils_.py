@@ -1,5 +1,6 @@
 import numpy as np
 import itertools as it
+from scipy.stats import binom
 
 
 def count_1(x):
@@ -137,7 +138,7 @@ def gen_all_shares_S(s_range, q, n_shares, op="sub", mode=1):
     return all_shares, masked_S
 
 def load_precomputed_vals(q, n_shares, op, mode):
-    with open(f"precomputed_shares_am_{q}_{n_shares}shares_{op}_mode{mode}.npy", "rb") as f:
+    with open(f"precompute_vals/precomputed_shares_am_{q}_{n_shares}shares_{op}_mode{mode}.npy", "rb") as f:
         shares = np.load(f)
         masked_S = np.load(f)
         return shares, masked_S
@@ -157,4 +158,20 @@ def pretty_print_a(a, tag=None):
     if tag != None:
         print(tag)
     for i in a:
-        print(i, end=" ")
+        print(i, end=", ")
+
+def prior_ps():
+    a = binom(2, 0.5)
+    b = binom(2, 0.5)
+    s_range = np.array([-2, -1, 0, 1, 2])
+    ps = np.zeros((5, ))
+    for i, s in enumerate(s_range):
+        p = 0
+        print(f"================={s}_{i}================")
+        for i_a in range(3):
+            for i_b in range(3):
+                if i_a - i_b==s:
+                    print(f"Matches: {i_a}_{i_b}")
+                    p += a.pmf(i_a)*b.pmf(i_b)
+        ps[i] = p
+    return ps
