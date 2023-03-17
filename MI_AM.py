@@ -76,8 +76,8 @@ def f_l_given_S(l, s_range, shares, masked_S, n_shares, q, sigma):
         acc_f[i] = prod_acc_f.sum()
     return acc_f
 
-def p_s_given_l(l, s, s_range, shares, masked_S, n_shares, q, sigma):
-    """Compute p(s|l) for all possible value of the secret s
+def p_s_given_l(l, s, s_range, prior_s, shares, masked_S, n_shares, q, sigma):
+    """Compute p(s|l)
         p(s|l) = f(l|s)/sum_s'(f(l|s'))
 
     Parameters
@@ -88,6 +88,8 @@ def p_s_given_l(l, s, s_range, shares, masked_S, n_shares, q, sigma):
         Secret value
     s_range : array size S
         Possible values for s
+    prior_s : array size S
+        Prior proba of s (binomial distribution)
     shares: array shape: (n_shares-1, q^(n_shares-1))
         Precomputed all possible randomness (l1, ..., ld-2)
     masked_S: array shape: (S, q^(n_shares-1))
@@ -101,11 +103,12 @@ def p_s_given_l(l, s, s_range, shares, masked_S, n_shares, q, sigma):
 
     Returns
     -------
-    f(l|S): array size S
-            f(l|S)[i] = f(l|si)
+    p(s|l): float
+            f(l|s)p(s)/sum_s'(f(l|s'))p(s')
 
     """
     f_l_S = f_l_given_S(l, s_range, shares, masked_S, n_shares, q, sigma)
+    f_l_S = f_l_S*prior_s
     numerator =  f_l_S[s]
     denominator = f_l_S.sum()
     p = numerator/denominator
@@ -114,7 +117,7 @@ def p_s_given_l(l, s, s_range, shares, masked_S, n_shares, q, sigma):
 
 def conditional_entropy(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=12345, op="sub", mode=1):
     """Estimate H(S|L) with n_samples
-        = 1/(q)*1/n sum_s sum_l log2(P(s|l))
+        =1/n sum_s sum_l p(s) log2(P(s|l))
 
     Parameters
     ----------
@@ -148,27 +151,29 @@ def conditional_entropy(s_range, prior_s, shares, masked_S, n_samples, n_shares,
     """
     acc_p = 0
     for i, s in enumerate(s_range):
-        acc_ps = 0
         s = np.array([s])
         print(f"Processing y = {s}, {HW(s)}")
         shares_ = gen_shares_am(s, q, n_shares, n_samples, seed, op, mode)
         leakages = gen_leakages(shares_, n_samples, sigma)
         L = np.array([val for val in leakages.values()]).T
+        acc_ps = 0
         for l in L:
-            psl = p_s_given_l(l, i, s_range, shares, masked_S, n_shares, q, sigma)
+            psl = p_s_given_l(l, i, s_range, prior_s, shares, masked_S, n_shares, q, sigma)
             acc_ps += np.log2(psl)
-        acc_ps = acc_ps/n_samples
+        acc_ps = acc_ps
         acc_p += acc_ps*prior_s[i]
-    return acc_p
+    return acc_p/n_samples
 
 def MI(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=12345, op="sub", mode=1):
     S_size = s_range.shape[0]
     con_ent = conditional_entropy(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed, op, mode)
-    return np.log2(S_size) + con_ent
+    return ent_s(prior_s) + con_ent
+
+def ent_s(prior_s):
+    log_2p = np.log2(prior_s)
+    return -(prior_s*log_2p).sum()
 
 def run_MI(q):
-    # manager = plt.get_current_fig_manager()
-    # manager.frame.Maximize(True)
     n_shares = 2
     s_range = np.array([-2, -1, 0, 1, 2])
     sparse_sigma_2 = np.linspace(-3, -1.5, 4)
@@ -177,7 +182,6 @@ def run_MI(q):
     dense_log_mie = np.linspace(-0.1, -2.75, 19)
     sigma_2 = np.hstack((sparse_sigma_2, dense_sigma_2))
     log_mie = np.hstack((sparse_log_mie, dense_log_mie))
-    # [print(sigma_2[i], log_mie[i]) for i in range(log_mie.shape[0])]
     sigma_2_10 = np.power(10, sigma_2)
     sigma = np.sqrt(sigma_2_10)
     I_sub = np.zeros_like(sigma_2)
@@ -185,17 +189,18 @@ def run_MI(q):
     i = 0
     prior_s = prior_ps()
     for s, m in zip(sigma, log_mie):
-        n = int(200/10**m)
+        rand_seed = 12345
+        print(rand_seed)
+        n = int(100000/10**m)
         print(f"=========================sigma^2: {np.log10(s**2)}, n_samples: {n}====================")
         print("==================OP SUB========================")
         shares, masked_S = load_precomputed_vals(q, n_shares, op="sub", mode="1")
-        mi_sub = MI(s_range, prior_s, shares, masked_S, n, n_shares, q, s, seed=12345)
+        mi_sub = MI(s_range, prior_s, shares, masked_S, n, n_shares, q, s, seed=rand_seed)
         print("==================OP ADD========================")
         shares, masked_S = load_precomputed_vals(q, n_shares, op="add", mode="1")
-        # print(shares.shape, masked_S.shape)
-        mi_add = MI(s_range, prior_s, shares, masked_S, n, n_shares, q, s, seed=12345, op="add")
+        mi_add = MI(s_range, prior_s, shares, masked_S, n, n_shares, q, s, seed=rand_seed, op="add")
         with open(f"log/log_{q}_{n_shares}.txt", "a") as f_:
-            f_.write(f"{mi_sub}_{mi_add}\n")
+            f_.write(f"{mi_sub}_{mi_add}_{s}\n")
         mi_sub = np.log10(mi_sub)
         mi_add = np.log10(mi_add)
         I_sub[i] = mi_sub
@@ -237,17 +242,19 @@ if __name__ == '__main__':
     q = 23
     n_shares = 2
     s_range = np.array([-2, -1, 0, 1, 2])
-    # print(prior_ps())
+    # print()
     # f_test()
     # shares, masked_S = gen_all_shares_S(s_range, q, n_shares)
     # shares, masked_S = gen_all_shares_S(s_range, q, n_shares, op="add", mode=1)
-    # run_MI(q=q)
-    with open("log/MI_23_2_add.npy", "rb") as f:
-        Iadd = np.load(f)
-    with open("log/MI_23_2_sub.npy", "rb") as f:
-        Isub = np.load(f)
-    pretty_print_a(10**Iadd, tag="add")
-    pretty_print_a(10**Isub, tag="\nsub")
+    run_MI(q=q)
+    # print(ent_s(prior_ps()))
+    # with open("log/MI_23_2_add.npy", "rb") as f:
+    #     Iadd = np.load(f)
+    # with open("log/MI_23_2_sub.npy", "rb") as f:
+    #     Isub = np.load(f)
+    # pretty_print_a(10**Iadd, tag="add")
+    # pretty_print_a(10**Isub, tag="\nsub")
+    # print(ent_s(prior_ps()))
     # check_add()
     # sparse_sigma_2 = np.linspace(-3, -1.5, 4)
     # sparse_log_mie = np.zeros_like(sparse_sigma_2)
