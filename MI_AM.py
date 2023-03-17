@@ -254,19 +254,4 @@ if __name__ == '__main__':
     #     Isub = np.load(f)
     # pretty_print_a(10**Iadd, tag="add")
     # pretty_print_a(10**Isub, tag="\nsub")
-    # print(ent_s(prior_ps()))
-    # check_add()
-    # sparse_sigma_2 = np.linspace(-3, -1.5, 4)
-    # sparse_log_mie = np.zeros_like(sparse_sigma_2)
-    # dense_log_mie = np.linspace(-0.1, -2.75, 19)
-    # log_mie = np.hstack((sparse_log_mie, dense_log_mie))
-    # for m in log_mie:
-    #     print(int(100/10**m), end=" ")
-    # s_range = s_range_o%q
-    # s = s_range[0]
-    # st = time()
-    # print(time() - st)
-    # print(shares.shape)
-    # print(masked_S.shape)
-    # print(shares[:3])
-    # print(masked_S[:, :3])
+    
