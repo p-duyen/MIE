@@ -7,7 +7,8 @@ from scipy.integrate import quad
 from scipy.stats import norm
 from utils_ import *
 from time import time
-
+from multiprocessing import Pool, Manager, Value, Array
+from functools import partial
 
 
 def f_li_given_S(li, q, sigma):
@@ -160,13 +161,40 @@ def conditional_entropy(s_range, prior_s, shares, masked_S, n_samples, n_shares,
         for l in L:
             psl = p_s_given_l(l, i, s_range, prior_s, shares, masked_S, n_shares, q, sigma)
             acc_ps += np.log2(psl)
-        acc_ps = acc_ps
         acc_p += acc_ps*prior_s[i]
     return acc_p/n_samples
+def cond_ent_compose(s, i, acc_p, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=12345, op="sub", mode=1):
+    s = np.array([s])
+    print(f"Processing y = {s}, {HW(s)} i = {i}")
+    shares_ = gen_shares_am(s, q, n_shares, n_samples, seed, op, mode)
+    leakages = gen_leakages(shares_, n_samples, sigma)
+    L = np.array([val for val in leakages.values()]).T
+    acc_ps = 0
+    for l in L:
+        psl = p_s_given_l(l, i, s_range, prior_s, shares, masked_S, n_shares, q, sigma)
+        acc_ps += np.log2(psl)
+    acc_p[i] += acc_ps*prior_s[i]
+
+def cond_ent_multiprocess(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=12345, op="sub", mode=1):
+    manager = Manager()
+    acc_p = manager.list([0, 0, 0, 0, 0])
+    idx = np.arange(s_range.shape[0])
+    f_ = partial(cond_ent_compose, acc_p=acc_p, prior_s=prior_s, shares=shares, masked_S=masked_S, n_samples=n_samples, n_shares=n_shares, q=q, sigma=sigma, seed=seed, op=op, mode=mode)
+    pool = Pool(s_range.shape[0])
+    pool.starmap(f_, zip(s_range, idx))
+    pool.close()
+    pool.join()
+    acc_p_l = np.array(acc_p)
+    return acc_p_l.sum()/n_samples
+
+def MI_(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=12345, op="sub", mode=1):
+    S_size = s_range.shape[0]
+    con_ent = conditional_entropy(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed, op, mode)
+    return ent_s(prior_s) + con_ent
 
 def MI(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=12345, op="sub", mode=1):
     S_size = s_range.shape[0]
-    con_ent = conditional_entropy(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed, op, mode)
+    con_ent = cond_ent_multiprocess(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed, op, mode)
     return ent_s(prior_s) + con_ent
 
 def ent_s(prior_s):
@@ -188,17 +216,16 @@ def run_MI(q):
     I_add = np.zeros_like(sigma_2)
     i = 0
     prior_s = prior_ps()
+    shares_sub, masked_S_sub = load_precomputed_vals(q, n_shares, op="sub", mode="1")
+    shares_add, masked_S_add = load_precomputed_vals(q, n_shares, op="add", mode="1")
     for s, m in zip(sigma, log_mie):
         rand_seed = 12345
-        print(rand_seed)
-        n = int(100000/10**m)
+        n = int(1000/10**m)
         print(f"=========================sigma^2: {np.log10(s**2)}, n_samples: {n}====================")
         print("==================OP SUB========================")
-        shares, masked_S = load_precomputed_vals(q, n_shares, op="sub", mode="1")
-        mi_sub = MI(s_range, prior_s, shares, masked_S, n, n_shares, q, s, seed=rand_seed)
+        mi_sub = MI(s_range, prior_s, shares_sub, masked_S_sub, n, n_shares, q, s, seed=rand_seed)
         print("==================OP ADD========================")
-        shares, masked_S = load_precomputed_vals(q, n_shares, op="add", mode="1")
-        mi_add = MI(s_range, prior_s, shares, masked_S, n, n_shares, q, s, seed=rand_seed, op="add")
+        mi_add = MI(s_range, prior_s, shares_add, masked_S_add, n, n_shares, q, s, seed=rand_seed, op="add")
         with open(f"log/log_{q}_{n_shares}.txt", "a") as f_:
             f_.write(f"{mi_sub}_{mi_add}_{s}\n")
         mi_sub = np.log10(mi_sub)
@@ -239,13 +266,12 @@ def check_add():
     return 0
 
 if __name__ == '__main__':
-    q = 23
+    q = 1009
     n_shares = 2
     s_range = np.array([-2, -1, 0, 1, 2])
-    # print()
     # f_test()
-    # shares, masked_S = gen_all_shares_S(s_range, q, n_shares)
-    # shares, masked_S = gen_all_shares_S(s_range, q, n_shares, op="add", mode=1)
+    shares, masked_S = gen_all_shares_S(s_range, q, n_shares)
+    shares, masked_S = gen_all_shares_S(s_range, q, n_shares, op="add", mode=1)
     run_MI(q=q)
     # print(ent_s(prior_ps()))
     # with open("log/MI_23_2_add.npy", "rb") as f:
@@ -254,4 +280,3 @@ if __name__ == '__main__':
     #     Isub = np.load(f)
     # pretty_print_a(10**Iadd, tag="add")
     # pretty_print_a(10**Isub, tag="\nsub")
-    

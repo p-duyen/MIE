@@ -132,7 +132,7 @@ def gen_all_shares_S(s_range, q, n_shares, op="sub", mode=1):
             all_shares[..., 0] = (q - all_shares[..., 0])%q
         if mode==0:
             all_shares = (q - all_shares)%q
-    with open(f"precomputed_shares_am_{q}_{n_shares}shares_{op}_mode{mode}.npy", "wb") as f:
+    with open(f"precompute_vals/precomputed_shares_am_{q}_{n_shares}shares_{op}_mode{mode}.npy", "wb") as f:
         np.save(f, all_shares)
         np.save(f, masked_S)
     return all_shares, masked_S
@@ -167,11 +167,9 @@ def prior_ps():
     ps = np.zeros((5, ))
     for i, s in enumerate(s_range):
         p = 0
-        print(f"================={s}_{i}================")
         for i_a in range(3):
             for i_b in range(3):
                 if i_a - i_b==s:
-                    print(f"Matches: {i_a}_{i_b}")
                     p += a.pmf(i_a)*b.pmf(i_b)
         ps[i] = p
     return ps
