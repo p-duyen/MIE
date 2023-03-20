@@ -28,6 +28,7 @@ def pdf_normal(x, mu, sigma):
     ep = -ep**2/2
     return np.exp(ep) / (sigma * np.sqrt(2*np.pi))
 
+
 def gen_shares(y, n_shares, n_samples):
     shares = {}
     masked_y = y.copy()
@@ -173,3 +174,9 @@ def prior_ps():
                     p += a.pmf(i_a)*b.pmf(i_b)
         ps[i] = p
     return ps
+def int_l(lmin, lmax, n_points):
+    int_l0 =  np.linspace(lmin, lmax, num=n_points, endpoint=True)
+    int_l1 =  np.linspace(lmin, lmax, num=n_points, endpoint=True)
+    int_l = np.meshgrid(int_l0, int_l1)
+
+    return int_l0, int_l1, int_l
