@@ -258,6 +258,61 @@ def conditional_entropy_(s_range, prior_s, shares, masked_S, n_shares, q, sigma,
     h = simpson(simpson(g, int_l1), int_l0)/q
     return h
 
+def conditional_entropy__(s_range, prior_s, shares, masked_S, n_shares, q, sigma, seed=12345, op="sub", mode=1):
+    """Estimate H(S|L) with n_samples
+        =1/n sum_s sum_l p(s) log2(P(s|l))
+
+    Parameters
+    ----------
+    s_range : array size S
+        Possible values for s
+    prior_s : array size S
+        Prior proba of s (binomial distribution)
+    shares: array shape: (n_shares-1, q^(n_shares-1))
+        Precomputed all possible randomness (l1, ..., ld-2)
+    masked_S: array shape: (S, q^(n_shares-1))
+        Precomputed masked secret (l0) for all possible value of secret
+    n_samples: int
+        Number of samples
+    n_shares: int
+        Number of shares
+    q: int
+        Prime
+    sigma: float
+        Standard deviation for Gaussian leakages
+    seed: int
+        Seed for prg, force different op and mode to have the same shares values
+    op: string "add" or "sub"
+        Operations to compute masked s (s + (q - sum_mod(shares)) for "add", s - sum_mod(shares) for "sub"))
+    mode: int 0, 1
+        For add op: 0 to convert every shares to the additive inverse, 1 to convert 1 share to additive inverse
+
+    Returns
+    -------
+    Estimate H(S|L)
+
+    """
+    acc_h = 0
+    n_points = 400
+    lmin = -1
+    lmax = 5
+    int_l0 = np.linspace(lmin, lmax, n_points)
+    int_l1 = np.linspace(lmin, lmax, n_points)
+    int_l = np.meshgrid(int_l0, int_l1, indexing="ij")
+    g = np.zeros((n_points, n_points))
+    for i, s in enumerate(s_range):
+        print(f"Processing y = {s}, {HW(s)} i = {i}")
+        for i_ in range(n_points):
+            for j_ in range(n_points):
+                l = np.array([int_l[0][i_, j_], int_l[1][i_, j_]])
+                fls, psl = p_s_given_l_(l, i, s_range, prior_s, shares, masked_S, n_shares, q, sigma)
+                if psl == 0:
+                    g[i_, j_]+= -100000*fls*prior_s[i]
+                else:
+                    g[i_, j_] += fls*np.log2(psl)*prior_s[i]
+    h = simpson(simpson(g, int_l1), int_l0)/q
+    return h
+
 def cond_ent_compose(s, i, acc_p, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=12345, op="sub", mode=1):
     s = np.array([s])
     print(f"Processing y = {s}, {HW(s)} i = {i}")
@@ -288,7 +343,7 @@ def MI_(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=
     return ent_s(prior_s) + con_ent
 def MI__(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=12345, op="sub", mode=1):
     S_size = s_range.shape[0]
-    con_ent = conditional_entropy_(s_range, prior_s, shares, masked_S, n_shares, q, sigma, seed, op, mode)
+    con_ent = conditional_entropy__(s_range, prior_s, shares, masked_S, n_shares, q, sigma, seed, op, mode)
     return ent_s(prior_s) + con_ent
 
 def MI(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=12345, op="sub", mode=1):
@@ -365,8 +420,8 @@ def check_add():
     return 0
 
 def test_f():
-    q = 19
-    run_MI(q=19)
+    q = 23
+    # run_MI(q=19)
     n_shares = 2
     sigma = 0.03162277660168379
     s_range = np.array([-2, -1, 0, 1, 2])
@@ -394,7 +449,14 @@ def test_f():
     # # # g_s_given_L(s, f_L, prior_s, n_shares, q, sigma, seed=12345, op="sub", mode=1)
     # conditional_entropy_(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=12345, op="sub", mode=1)
 
-
+def tiny_test():
+    lmin = -2
+    lmax = 4
+    n_points = 100
+    int_l0 = np.linspace(lmin, lmax, n_points)
+    int_l1 = np.linspace(lmin, lmax, n_points)
+    L = np.meshgrid(int_l0, int_l1, indexing="ij")
+    print(L)
 
 if __name__ == '__main__':
     q = 1009
@@ -405,7 +467,8 @@ if __name__ == '__main__':
     #
     # print(L[0].shape, L[1].shape)
     # f_test()
-    test_f()
+    # test_f()
+    tiny_test()
     # x = np.linspace(0, 1, 20)
     # y = np.linspace(0, 1, 30)
     # z = np.cos(x[:,None])**4 + np.sin(y)**2
