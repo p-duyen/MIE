@@ -7,8 +7,9 @@ from scipy.integrate import quad
 from scipy.stats import norm
 from utils_ import *
 from time import time
-from multiprocessing import Pool, Manager, Value, Array
+from multiprocessing import Pool, Manager, Value, Array, Process
 from functools import partial
+import multiprocessing.pool
 
 
 def f_li_given_S(li, q, sigma):
@@ -264,15 +265,54 @@ def check_add():
     plt.savefig(f"MI_add_{qs}.png")
 
     return 0
+class NoDaemonProcess(Process):
+    # make 'daemon' attribute always return False
+    @property
+    def daemon(self):
+        return False
+
+    @daemon.setter
+    def daemon(self, val):
+        pass
+
+
+class NoDaemonProcessPool(multiprocessing.pool.Pool):
+
+    def Process(self, *args, **kwds):
+        proc = super(NoDaemonProcessPool, self).Process(*args, **kwds)
+        proc.__class__ = NoDaemonProcess
+
+        return proc
+def convergence_check(n_samples, s_range, prior_s, shares, masked_S, n_shares, q, sigma, op):
+    print(f"=========Proceed n={n_samples}===============")
+    n_rep = 20
+    mia = np.zeros(n_rep)
+    for i in range(n_rep):
+        print(f"=========Proceed n={n_samples} rep: {i}===============")
+        r_seed = np.random.randint(1000, 20000)
+        mi = MI(s_range, prior_s, shares, masked_S, n_samples, n_shares, q, sigma, seed=r_seed, op=op, mode=1)
+        mia[i] = mi
+    with open(f"log/conv_{q}_{sigma}_{n_samples}.npy", "wb") as f:
+        np.save(f, mia)
 
 if __name__ == '__main__':
-    q = 1009
+    q = 23
     n_shares = 2
     s_range = np.array([-2, -1, 0, 1, 2])
     # f_test()
+    op = "sub"
     shares, masked_S = gen_all_shares_S(s_range, q, n_shares)
-    shares, masked_S = gen_all_shares_S(s_range, q, n_shares, op="add", mode=1)
-    run_MI(q=q)
+    # shares, masked_S = gen_all_shares_S(s_range, q, n_shares, op="add", mode=1)
+    prior_s = prior_ps()
+    n_samples = [1000000]
+    sigma = 0.03162277660168379
+    f_check = partial(convergence_check, s_range=s_range, prior_s=prior_s, shares=shares, masked_S=masked_S, n_shares=n_shares, q=q, sigma=sigma, op=op)
+    f_check(n_samples[0])
+    # pool = NoDaemonProcessPool(1)
+    # pool.map(f_check, n_samples[3:])
+    # pool.close()
+    # pool.join()
+
     # print(ent_s(prior_ps()))
     # with open("log/MI_23_2_add.npy", "rb") as f:
     #     Iadd = np.load(f)
