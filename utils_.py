@@ -155,11 +155,11 @@ def pretty_print_dict_HW(d, tag=None):
     for key, val in d.items():
         print(f"{key}: {HW(val)}")
 
-def pretty_print_a(a, tag=None):
+def pretty_print_a(a, tag=None, end=", "):
     if tag != None:
         print(tag)
     for i in a:
-        print(i, end=", ")
+        print(i, end=end)
 
 def prior_ps():
     a = binom(2, 0.5)
@@ -174,9 +174,16 @@ def prior_ps():
                     p += a.pmf(i_a)*b.pmf(i_b)
         ps[i] = p
     return ps
-def int_l(lmin, lmax, n_points):
+def int_l(lmin=-2, lmax=7, n_points=100):
     int_l0 =  np.linspace(lmin, lmax, num=n_points, endpoint=True)
     int_l1 =  np.linspace(lmin, lmax, num=n_points, endpoint=True)
-    int_l = np.meshgrid(int_l0, int_l1)
+    int_L = np.meshgrid(int_l0, int_l1)
 
-    return int_l0, int_l1, int_l
+    return int_l0, int_l1, int_L
+# sparse_sigma_2 = np.linspace(-3, -1.5, 4)
+# dense_sigma_2 = np.linspace(-1.25, 1, 19)
+# sigma_2_log10 = np.linspace(1.15, 2, 6)
+# sigma_2 = np.hstack((sparse_sigma_2, dense_sigma_2, sigma_2_log10))
+# sigma_2_10 = np.power(10, sigma_2)
+# sigma = np.sqrt(sigma_2_10)
+# print(sigma)
