@@ -1,6 +1,8 @@
 import numpy as np
 import itertools as it
 from scipy.stats import binom
+import os
+from tqdm import tqdm
 
 
 def count_1(x):
@@ -94,9 +96,11 @@ def gen_shares_am(s, q, n_shares, n_samples, seed=12345, op="sub", mode=1):
             shares["S_1"] = (q - shares["S_1"])%q
     return shares
 
-def gen_all_shares_S(s_range, q, n_shares, op="sub", mode=1):
-    """Exhaustive shares matrix for every y in Y
-
+def gen_all_shares_S_(s_range, q, n_shares, op="sub", mode=1):
+    """Exhaustive shares matrix for every s in s_range
+        s = (s0 + s1 + ... + s{d - 1})%q
+        s1, ..., s_{d-1} <--$ F_q
+        s0 = [s - (s1,..., s_{d-1})] %q
     Parameters
     ----------
     s_range : array
@@ -106,10 +110,17 @@ def gen_all_shares_S(s_range, q, n_shares, op="sub", mode=1):
     n_shares: int
         Number of shares in encoding
     op: string "add" or "sub"
-        Operations to compute masked s (s + (q - sum_mod(shares)) for "add", (s - sum_mod(shares) for "sub"))
+        Operations choose to represent shares ()
+        op == "sub":
+            Keep s_1, ..., s_{d-1} as generated and subtract the sum of shares.
+        op == "add"
+            Change s1, ..., s_{d-1} to (q-si) depends on the mode and sum (sub some of them) the shares.
     mode: int 0, 1
-        For add op: 0 to convert every shares to the additive inverse, 1 to convert 1 share to additive inverse
-
+        Option for number of shares that changes it representation.
+        mode == 1:
+            Only s1 change into q-s1
+        mode == 0:
+            All shares will change into q-s_i
     Returns
     -------
     all_shares: array shape: (n_shares-1, q^(n_shares-1))
@@ -137,9 +148,126 @@ def gen_all_shares_S(s_range, q, n_shares, op="sub", mode=1):
         np.save(f, all_shares)
         np.save(f, masked_S)
     return all_shares, masked_S
+def gen_all_shares_S(s_range, q, n_shares, op="sub", mode=1):
+    """Exhaustive shares matrix for every s in s_range
+        s = (s0 + s1 + ... + s{d - 1})%q
+        s1, ..., s_{d-1} <--$ F_q
+        s0 = [s - (s1,..., s_{d-1})] %q
+    Parameters
+    ----------
+    s_range : array
+        Possible values for s
+    q: int
+        Prime field
+    n_shares: int
+        Number of shares in encoding
+    op: string "add" or "sub"
+        Operations choose to represent shares
+        op == "sub":
+            Keep s_1, ..., s_{d-1} as generated and subtract the sum of shares.
+        op == "add"
+            Change s1, ..., s_{d-1} to (q-si) depends on the mode and sum (sub some of them) the shares.
+    mode: string "one" or "all"
+        Option for number of shares that changes it representation.
+        mode == "one":
+            Only s1 change into q-s1
+        mode == "all":
+            All shares will change into q-s_i
+    Returns
+    -------
+    all_shares: array shape: (n_shares-1, q^(n_shares-1))
+        All posible n_shares-1 shares values
+    masked_S: array shape: (s_range, q^(n_shares-1))
+        Masked secret for all value in s_range,
+    """
+    size_S = s_range.shape[0]
+    Zq = np.arange(q).reshape(1, q)
+    share_range = np.repeat(Zq, repeats=n_shares-1, axis=0)
+    all_shares = np.zeros((q**(n_shares-1), n_shares-1), dtype=np.int16)
+    masked_S = np.zeros((size_S, q**(n_shares-1)), dtype=np.int16)
+    share_vals = np.meshgrid(*share_range)
+    for i in range(n_shares-1):
+        all_shares[..., i] = share_vals[i].reshape(q**(n_shares-1))
+    for i, s in enumerate(s_range):
+        shares_sum = np.apply_along_axis(shares_addmod, 1, all_shares, q)
+        masked_S[i] = (s - shares_sum)%q
+    if op=="add":
+        if mode=="one":
+            all_shares[..., 0] = (q - all_shares[..., 0])%q
+        if mode=="all":
+            all_shares = (q - all_shares)%q
+    mode_flag = "" if op == "sub" else mode
+    with open(f"precompute_vals/precomputed_shares_am_{q}_{n_shares}shares_{op}{mode_flag}.npy", "wb") as f:
+        np.save(f, all_shares)
+        np.save(f, masked_S)
+    print(f"=============Gen shares for {q} {n_shares} shares op {op} mode {mode} DONE===============")
+    return all_shares, masked_S
+def gen_all_shares_S_HW(s_range, q, n_shares, op="sub", mode=1):
+    """Exhaustive shares matrix for every s in s_range
+        s = (s0 + s1 + ... + s{d - 1})%q
+        s1, ..., s_{d-1} <--$ F_q
+        s0 = [s - (s1,..., s_{d-1})] %q
+    Parameters
+    ----------
+    s_range : array
+        Possible values for s
+    q: int
+        Prime field
+    n_shares: int
+        Number of shares in encoding
+    op: string "add" or "sub"
+        Operations choose to represent shares
+        op == "sub":
+            Keep s_1, ..., s_{d-1} as generated and subtract the sum of shares.
+        op == "add"
+            Change s1, ..., s_{d-1} to (q-si) depends on the mode and sum (sub some of them) the shares.
+    mode: string "one" or "all"
+        Option for number of shares that changes it representation.
+        mode == "one":
+            Only s1 change into q-s1
+        mode == "all":
+            All shares will change into q-s_i
+    Returns
+    -------
+    all_shares: array shape: (n_shares-1, q^(n_shares-1))
+        All posible n_shares-1 shares values
+    masked_S: array shape: (s_range, q^(n_shares-1))
+        Masked secret for all value in s_range,
+    """
+    mode_flag = "" if op == "sub" else mode
+    fn = f"precompute_vals/shares/{q}_{n_shares}shares_{op}{mode_flag}.npy"
+    if os.path.exists(fn):
+        print(f"Shares values are ready for {q} {n_shares} shares op {op} mode {mode}")
+        return 0
+    size_S = s_range.shape[0]
+    Zq = np.arange(q).reshape(1, q)
+    share_range = np.repeat(Zq, repeats=n_shares-1, axis=0)
+    all_shares = np.zeros((q**(n_shares-1), n_shares-1), dtype=np.int16)
+    masked_S = np.zeros((size_S, q**(n_shares-1)), dtype=np.int16)
+    share_vals = np.meshgrid(*share_range)
+    for i in range(n_shares-1):
+        all_shares[..., i] = share_vals[i].reshape(q**(n_shares-1))
+    for i, s in enumerate(s_range):
+        shares_sum = np.apply_along_axis(shares_addmod, 1, all_shares, q)
+        masked_S[i] = (s - shares_sum)%q
+    if op=="add":
+        if mode=="one":
+            all_shares[..., 0] = (q - all_shares[..., 0])%q
+        if mode=="all":
+            all_shares = (q - all_shares)%q
+    with open(fn, "wb") as f:
+        np.save(f, HW(all_shares))
+        np.save(f, HW(masked_S))
+    print(f"Shares values are ready for {q} {n_shares} shares op {op} mode {mode}")
+def ent_s(prior_s):
+    """Entropy for prior proba
+    """
+    log_2p = np.log2(prior_s)
+    return -(prior_s*log_2p).sum()
 
 def load_precomputed_vals(q, n_shares, op, mode):
-    with open(f"precompute_vals/precomputed_shares_am_{q}_{n_shares}shares_{op}_mode{mode}.npy", "rb") as f:
+    mode_flag = "" if op == "sub" else mode
+    with open(f"precompute_vals/shares/{q}_{n_shares}shares_{op}{mode_flag}.npy", "rb") as f:
         shares = np.load(f)
         masked_S = np.load(f)
         return shares, masked_S
@@ -179,11 +307,54 @@ def int_l(lmin=-2, lmax=7, n_points=100):
     int_l1 =  np.linspace(lmin, lmax, num=n_points, endpoint=True)
     int_L = np.meshgrid(int_l0, int_l1)
 
-    return int_l0, int_l1, int_L
-# sparse_sigma_2 = np.linspace(-3, -1.5, 4)
-# dense_sigma_2 = np.linspace(-1.25, 1, 19)
-# sigma_2_log10 = np.linspace(1.15, 2, 6)
-# sigma_2 = np.hstack((sparse_sigma_2, dense_sigma_2, sigma_2_log10))
-# sigma_2_10 = np.power(10, sigma_2)
-# sigma = np.sqrt(sigma_2_10)
-# print(sigma)
+    return int_l0, int_L
+
+def int_L_3(q, sigma, n_shares=3, dense=50):
+    Zq = np.arange(q)
+    hw = HW(Zq)
+    maxhw = hw.max()
+    lmin = - sigma*5
+    lmax = maxhw + sigma*5
+    n_points = int(lmax-lmin)*dense
+    dir_path = f"precompute_vals/int_L/{q}"
+    if os.path.exists(dir_path):
+        print(f"Directory for {q} existed")
+    else:
+        os.makedirs(dir_path, exist_ok = True)
+        print(f"Directory for {q} created")
+    fn = f"{n_shares}_{dense}_{sigma}.npy"
+    if os.path.exists(f"{dir_path}/{fn}"):
+        print(f"Data's ready for {q} {sigma:0.4f}")
+        return 0
+    int_li, int_L_2 = int_l(lmin, lmax, n_points)
+    L0 = int_L_2[0].reshape(n_points*n_points)
+    L1 = int_L_2[1].reshape(n_points*n_points)
+    print("loop size", int_li.shape)
+    int_pbar = tqdm(int_li)
+    with open(f"{dir_path}/{fn}", "wb") as f:
+        np.save(f, int_li)
+        for li in int_pbar:
+            int_pbar.set_description(f"Precompute L for {q} sigma: {sigma:0.4f}")
+            L2 = np.ones_like(L0)*li
+            L =  np.vstack((L0, L1, L2))
+            np.save(f, L)
+    print(f"Data's ready for {q} {sigma:0.4f}")
+
+def gen_sigma_():
+    sparse_sigma_2 = np.linspace(-3, -1.5, 4)
+    dense_sigma_2 = np.linspace(-1.25, 1, 19)
+    sigma_2_log10 = np.linspace(1.25, 2, 4)
+    sigma_2 = np.hstack((sparse_sigma_2, dense_sigma_2, sigma_2_log10))
+    sigma_2_10 = np.power(10, sigma_2)
+    sigma = np.sqrt(sigma_2_10)
+    return sigma_2, sigma
+def gen_sigma():
+    sparse_sigma_2 = np.linspace(-3, -1.5, 4)
+    dense_sigma_2 = np.linspace(-1.25, 1, 19)
+    sigma_2_log10 = np.linspace(1.25, 2, 4)
+    sigma_2 = np.hstack((sparse_sigma_2, dense_sigma_2, sigma_2_log10))
+    sigma_2_10 = np.power(10, sigma_2)
+    idx = range(0, len(sigma_2), 2)
+    sigma = np.sqrt(sigma_2_10)
+    return sigma_2[idx], sigma[idx]
+# print(gen_sigma())
