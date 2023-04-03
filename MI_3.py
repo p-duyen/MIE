@@ -342,3 +342,8 @@ def MI_run(q, sigma_2, sigma):
                 plt.plot(sigma_2, mi, label=f"{n_shares} shares {o} {m}")
     plt.legend()
     plt.show()
+if __name__ == '__main__':
+    q = 23
+    sigma_2, sigma = gen_sigma()
+    prec_run(q, sigma[:-1])
+    MI_run(q, sigma_2[:-2], sigma[:-2])
